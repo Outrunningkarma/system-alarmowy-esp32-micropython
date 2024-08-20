@@ -1,1 +1,1 @@
-# system-alarmowy-esp32-micropython
+# System alarmowy bazujący na mikrokontrolerze ESP32 oraz języku MicroPython
