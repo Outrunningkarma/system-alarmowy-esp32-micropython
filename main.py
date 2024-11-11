@@ -1,7 +1,7 @@
 import machine
 import time
-from ST7735 import TFT  # Import the TFT class from your library
-import sysfont          # Import the font data
+from ST7735 import TFT
+import sysfont
 from machine import Pin
 
 # Initialize SPI interface for the display
@@ -10,30 +10,26 @@ spi = machine.SPI(
     baudrate=20000000,
     polarity=0,
     phase=0,
-    sck=machine.Pin(10),    # GPIO10 (CLK)
-    mosi=machine.Pin(11)    # GPIO11 (DIN/MOSI)
-    # MISO is not used by the display
+    sck=machine.Pin(10),
+    mosi=machine.Pin(11)
 )
 
 # Define control pins for the TFT display
-dc = machine.Pin(8, machine.Pin.OUT)     # GPIO8 (DC - Data/Command)
-reset = machine.Pin(7, machine.Pin.OUT)  # GPIO7 (RST - Reset pin)
-cs = machine.Pin(9, machine.Pin.OUT)     # GPIO9 (CS - Chip Select)
+dc = machine.Pin(8, machine.Pin.OUT)
+reset = machine.Pin(7, machine.Pin.OUT)
+cs = machine.Pin(9, machine.Pin.OUT)
 
 # Initialize TFT display
 tft = TFT(spi, dc, reset, cs)
-tft.initr()      # For red tab displays
+tft.initr()
 tft.rgb(True)
-tft.rotation(0)
+tft.rotation(1)
 
-# Clear the display with black color
 tft.fill(tft.BLACK)
 
-# Keypad setup - Zmienione piny dla wierszy
-ROWS = [12, 13, 5, 18]  # GPIO pins for rows (zmieniono tylko piny 6 i 7 na 12 i 13)
-COLS = [2, 3, 4]        # GPIO pins for columns (bez zmian)
+ROWS = [12, 13, 5, 18]  # GPIO pins for rows
+COLS = [2, 3, 4]        # GPIO pins for columns
 
-# Map keypad buttons
 keys = [
     ['1', '2', '3'],
     ['4', '5', '6'],
@@ -41,47 +37,124 @@ keys = [
     ['*', '0', '#']
 ]
 
-# Set up row pins as outputs
 row_pins = [Pin(pin_num, Pin.OUT) for pin_num in ROWS]
-# Set up column pins as inputs with pull-down
 col_pins = [Pin(pin_num, Pin.IN, Pin.PULL_DOWN) for pin_num in COLS]
 
+current_screen = 1
+entered_code = ""
+last_entered_code = ""
+input_active = False  # Controls if input is active for code entry
+
 def read_keypad():
-    """Reads which key is pressed on the keypad."""
     for row in range(4):
-        # Set all rows to low
         for i in range(4):
             row_pins[i].value(0)
-        # Set current row to high
         row_pins[row].value(1)
-        # Check columns
         for col in range(3):
             if col_pins[col].value() == 1:
                 return keys[row][col]
     return None
 
-def display_number(number):
-    """Display the given number on the TFT screen."""
-    tft.fill(tft.BLACK)  # Clear screen
-    tft.text((10, 10), number, tft.WHITE, sysfont.sysfont, 2)
+def display_screen_number():
+    tft.text((90, 60), f"Screen {current_screen}", tft.WHITE, sysfont.sysfont, 1)
+
+def clear_screen():
+    tft.fill(tft.BLACK)
+    display_screen_number()
+
+def update_time():
+    now = time.localtime()
+    current_time = "{:02}:{:02}".format(now[3], now[4])
+    tft.text((100, 10), current_time, tft.WHITE, sysfont.sysfont, 1)
+
+def main_screen():
+    clear_screen()
+    tft.text((10, 30), 'Wpisz kod:', tft.WHITE, sysfont.sysfont, 1)
+
+def thank_you_screen():
+    clear_screen()
+    tft.text((10, 30), 'Dziekuje za wpisanie kodu', tft.WHITE, sysfont.sysfont, 1)
+
+def last_code_screen():
+    clear_screen()
+    tft.text((10, 30), "Ostatni kod:", tft.WHITE, sysfont.sysfont, 1)
+    tft.text((10, 50), f"{last_entered_code}", tft.WHITE, sysfont.sysfont, 1)
+
+def time_screen():
+    clear_screen()
+    display_screen_number()  # Show "Screen 3" by default
+
+def show_back_option():
+    tft.text((90, 60), "* - wroc", tft.WHITE, sysfont.sysfont, 1)
 
 def main():
-    """Main function to read keypad and display values."""
-    entered_number = ""  # Variable to store the entered number
-    tft.fill(tft.BLACK)
-    tft.text((10, 10), 'Wpisz liczbe:', tft.WHITE, sysfont.sysfont, 1)
+    global current_screen, entered_code, last_entered_code, input_active
+
+    last_screen_change_time = time.time()  # Time of last screen change
+    debounce_time = 0.15  # Shorter debounce time for quick response on press without hold
 
     while True:
-        key = read_keypad()
-        if key:
-            if key == '#':  # If '#' is pressed, show the number
-                display_number(entered_number)
-            elif key == '*':  # If '*' is pressed, reset the input
-                entered_number = ""
-                tft.fill(tft.BLACK)
-            else:
-                entered_number += key  # Append pressed key to the number
-                time.sleep(0.3)  # Debounce delay
+        clear_screen()
+        if current_screen == 1:
+            main_screen()
+        elif current_screen == 2:
+            last_code_screen()
+        elif current_screen == 3:
+            time_screen()
+
+        input_active = False  # Reset input activity state on each screen entry
+
+        while True:
+            key = read_keypad()
+            if key:
+                current_time = time.time()
+                if key == '4' and (current_time - last_screen_change_time) > debounce_time:
+                    current_screen = (current_screen - 1) if current_screen > 1 else 3
+                    last_screen_change_time = current_time  # Update time for next press
+                    break
+                elif key == '6' and (current_time - last_screen_change_time) > debounce_time:
+                    current_screen = (current_screen + 1) if current_screen < 3 else 1
+                    last_screen_change_time = current_time  # Update time for next press
+                    break
+                elif key == '#':  # Confirm screen selection
+                    if current_screen == 1 and not input_active:
+                        input_active = True
+                        entered_code = ""
+                        tft.fill(tft.BLACK)  # Clear screen once input is active
+                    elif current_screen == 2:
+                        last_code_screen()
+                        show_back_option()
+                        while True:
+                            exit_key = read_keypad()
+                            if exit_key == '*':  # Exit to previous screen
+                                clear_screen()  # Reset to default screen
+                                break
+                    elif current_screen == 3:
+                        time_screen()
+                        update_time()  # Show time after confirmation
+                        show_back_option()
+                        while True:
+                            exit_key = read_keypad()
+                            if exit_key == '*':  # Exit to previous screen
+                                clear_screen()  # Reset to default screen
+                                break
+                elif input_active and current_screen == 1:  # Only accept input if input is active
+                    if key == '*':  # Exit input mode and return to screen with "Screen 1" text
+                        input_active = False
+                        main_screen()
+                        break
+                    elif key == '0':  # Confirm code
+                        last_entered_code = entered_code
+                        thank_you_screen()
+                        time.sleep(1)
+                        input_active = False
+                        main_screen()
+                        break
+                    else:
+                        entered_code += key
+                        tft.text((10, 40), entered_code, tft.WHITE, sysfont.sysfont, 2)
+                        time.sleep(0.1)  # Shorter delay for quicker response
+                time.sleep(0.1)  # Reduced general delay for improved responsiveness
 
 if __name__ == "__main__":
     main()
