@@ -30,7 +30,7 @@ tft.rotation(0)
 tft.fill(tft.BLACK)
 
 # Keypad setup - Zmienione piny dla wierszy
-ROWS = [12, 13, 5, 14]  # GPIO pins for rows (zmieniono tylko piny 6 i 7 na 12 i 13)
+ROWS = [12, 13, 5, 18]  # GPIO pins for rows (zmieniono tylko piny 6 i 7 na 12 i 13)
 COLS = [2, 3, 4]        # GPIO pins for columns (bez zmian)
 
 # Map keypad buttons
@@ -85,3 +85,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
